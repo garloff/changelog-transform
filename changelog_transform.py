@@ -39,9 +39,12 @@ def wrap(txt, indent, maxln):
 	#print(strg)
 	return strg
 
+class ParseError(ValueError):
+	pass
+
 class logitem:
 	"Class to hold one item"
-	def __init__(self, head, subitems=[]):
+	def __init__(self, head=None, subitems=[]):
 		self.head = head
 		self.subitems = subitems
 	def rpmout(self):
@@ -54,7 +57,42 @@ class logitem:
 		for it in self.subitems:
 			strg += '    - ' + wrap(it, 6, 70) + '\n'
 		return strg
-
+	def parse(self, txt, hdst, subst):
+		hdln  = len(hdst)
+		subln = len(subst)
+		if not txt[0:hdln] == hdst:
+			raise ParseError('should start with "- "')
+		ishead = True
+		self.head = ''
+		self.subitems = []
+		sub = ''
+		for ln in txt.splitlines():
+			#print(ln)
+			if ishead:
+				if ln[0:subln] == subst:
+					ishead = False
+					sub = ln[subln:]
+				elif ln[0:hdln] == ' '*hdln:
+					self.head += '\n' + ln
+				elif ln[0:hdln] == hdst:
+					self.head += ln[hdln:]
+				else:
+					raise ParseError('unexpected line start "%s"' % ln[0:subln]) 
+			else:
+				if ln[0:subln] == subst:
+					self.subitems.append(sub)
+					sub = ln[subln:]
+				elif ln[0:subln] == ' '*subln:
+					sub += '\n' + ln
+				else:
+					raise ParseError('unexpected subitem line start "%s"' % ln[0:subln])
+		if sub:
+			self.subitems.append(sub)
+			
+	def rpmparse(self, txt):
+		self.parse(txt, '- ', '  * ')
+	def debparse(self, txt):
+		self.parse(txt, '  * ', '    - ')
 
 class logentry:
 	"Class to hold one changelog entry data"
