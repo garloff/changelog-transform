@@ -14,6 +14,16 @@ def wrap(txt, indent, maxln):
 	strg = ''
 	idx = 0
 	while len(txt[idx:]) > maxln-indent:
+		# Handle preformatted text
+		lf   = txt[idx:idx+maxln-indent+1].rfind('\n')
+		if lf > 0 and txt[idx+lf+1:idx+lf+2] == ' ':
+			strg += txt[idx:idx+lf+1]
+			idx += lf+1
+			strg += ' '*indent
+			while txt[idx:idx+1] == ' ':
+				idx+=1
+			continue
+		# Reformatting (wrapping) necessary
 		sep  = txt[idx:idx+maxln-indent].rfind(' ')
 		sep2 = txt[idx:idx+maxln-indent].rfind('-')
 		if sep == -1 and sep2 == -1:
@@ -34,11 +44,17 @@ class logitem:
 	def __init__(self, head, subitems=[]):
 		self.head = head
 		self.subitems = subitems
-	def rpmprint(self):
+	def rpmout(self):
 		strg = '- ' + wrap(self.head, 2, 68) + '\n'
 		for it in self.subitems:
 			strg += '  * ' + wrap(it, 4, 68) + '\n'
 		return strg
+	def debout(self):
+		strg = '  * ' + wrap(self.head, 4, 70) + '\n'
+		for it in self.subitems:
+			strg += '    - ' + wrap(it, 6, 70) + '\n'
+		return strg
+
 
 class logentry:
 	"Class to hold one changelog entry data"
