@@ -16,11 +16,11 @@ def wrap(txt, indent, maxln):
 	while len(txt[idx:]) > maxln-indent:
 		# Handle preformatted text
 		lf   = txt[idx:idx+maxln-indent+1].rfind('\n')
-		if lf > 0 and txt[idx+lf+1:idx+lf+2] == ' ':
+		if lf > 0 and txt[idx+lf+1] == ' ':
 			strg += txt[idx:idx+lf+1]
 			idx += lf+1
 			strg += ' '*indent
-			while txt[idx:idx+1] == ' ':
+			while txt[idx] == ' ':
 				idx+=1
 			continue
 		# Reformatting (wrapping) necessary
@@ -29,7 +29,7 @@ def wrap(txt, indent, maxln):
 		if sep == -1 and sep2 == -1:
 			strg += txt[idx:idx+maxln-indent] + '\n' + ' '*indent
 			idx += maxln-indent
-		elif sep2 > sep:
+		elif sep2 > sep and not txt[sep2+1].isdigit():
 			strg += txt[idx:idx+sep2+1] + '\n' + ' '*indent
 			idx += sep2+1
 		else:
