@@ -102,7 +102,7 @@ class logentry:
 		self.date = date
 		self.email = email
 		self.authnm = authnm
-		self.pkgnm = pnm
+		self.pkgnm = pkgnm
 		self.vers = vers
 		self.dist = dist
 		self.urg = urg
@@ -113,14 +113,15 @@ class logentry:
 		if strg[78] == '0':
 			strg[78] = ' '
 		strg += " - %s\n\n" % self.email
-		strg += map(lambda x: x.rpmout(), self.entries)
-		strg += '\n'
+		for ent in self.entries:
+			strg += ent.rpmout() + '\n'
 		return strg
 	def debout(self):
 		strg = '%s (%s) %s; urgency=%s\n\n' % (self.pkgnm, self.vers,
-							self.dist,vself.urg)
-		strg += map(lambda x: x.debout(), self.entries)
-		strg += '\n\n -- %s <%s>  ' % (self.authnm, self.email)
+							self.dist, self.urg)
+		for ent in self.entries:
+			strg += ent.debout() + '\n'
+		strg += ' -- %s <%s>  ' % (self.authnm, self.email)
 		idx = len(strg)
 		strg += self.date.strftime("%a, %d %b %Y %H:%M:%S %z")
 		if strg[idx+6] == '0':
