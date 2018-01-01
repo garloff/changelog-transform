@@ -8,6 +8,7 @@
 
 import os
 import sys
+import datetime
 
 def wrap(txt, indent, maxln):
 	"Amazingly complex code to wrap text"
@@ -94,6 +95,39 @@ class logitem:
 	def debparse(self, txt):
 		self.parse(txt, '  * ', '    - ')
 
+
 class logentry:
 	"Class to hold one changelog entry data"
+	def __init__(self, date=None, email=None, authnm=None, pkgnm=None, vers=None, dist=None, urg=None, entries=[]):
+		self.date = date
+		self.email = email
+		self.authnm = authnm
+		self.pkgnm = pnm
+		self.vers = vers
+		self.dist = dist
+		self.urg = urg
+		self.entries = entries
+	def rpmout(self):
+		strg = '-------------------------------------------------------------------\n'
+		strg += self.date.strftime("%a %b %d %H:%M:%S %Z %Y")
+		if strg[78] == '0':
+			strg[78] = ' '
+		strg += " - %s\n\n" % self.email
+		strg += map(lambda x: x.rpmout(), self.entries)
+		strg += '\n'
+		return strg
+	def debout(self):
+		strg = '%s (%s) %s; urgency=%s\n\n' % (self.pkgnm, self.vers,
+							self.dist,vself.urg)
+		strg += map(lambda x: x.debout(), self.entries)
+		strg += '\n\n -- %s <%s>  ' % (self.authnm, self.email)
+		idx = len(strg)
+		strg += self.date.strftime("%a, %d %b %Y %H:%M:%S %z")
+		if strg[idx+6] == '0':
+			strg[idx+6] = ' '
+		strg += '\n\n'
+		return strg
+
+def main(argv):
+	#TODO: set locale to en_US
 	pass
