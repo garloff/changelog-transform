@@ -58,9 +58,12 @@ class logitem:
 		for it in self.subitems:
 			strg += '    - ' + wrap(it, 6, 70) + '\n'
 		return strg
-	def parse(self, txt, hdst, subst):
+	def parse(self, txt, hdst, subst, subcnt = None):
 		hdln  = len(hdst)
 		subln = len(subst)
+		if not subcnt:
+			subcnt = ' '*subln
+		subcln = len(subcnt)
 		if not txt[0:hdln] == hdst:
 			raise ParseError('should start with "- "')
 		ishead = True
@@ -80,11 +83,11 @@ class logitem:
 				else:
 					raise ParseError('unexpected line start "%s"' % ln[0:subln]) 
 			else:
-				if ln[0:subln] == subst:
+				if ln[0:subcln] == subcnt:
+					sub += '\n' + ln
+				elif ln[0:subln] == subst:
 					self.subitems.append(sub)
 					sub = ln[subln:]
-				elif ln[0:subln] == ' '*subln:
-					sub += '\n' + ln
 				else:
 					raise ParseError('unexpected subitem line start "%s"' % ln[0:subln])
 		if sub:
@@ -94,11 +97,13 @@ class logitem:
 		self.parse(txt, '- ', '  * ')
 	def debparse(self, txt):
 		self.parse(txt, '  * ', '    - ')
+	def debparse_misssub(self, txt):
+		self.parse(txt, '  * ', '    ', '     ')
 
 
 class logentry:
 	"Class to hold one changelog entry data"
-	def __init__(self, date=None, email=None, authnm=None, pkgnm=None, vers=None, dist=None, urg=None, entries=[]):
+	def __init__(self, date=None, email=None, authnm=None, pkgnm=None, vers=None, dist='stable', urg='low', entries=[]):
 		self.date = date
 		self.email = email
 		self.authnm = authnm

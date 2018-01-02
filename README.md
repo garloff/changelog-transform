@@ -8,4 +8,4 @@ RPM .changes entries into debian.changelog formats all the time. Writing
 good changelogs is enough work -- no need to add annoying 20% of mechanical
 work on top of it if computers can do the job.
 
-
+As of 2018-02-01, this is half-finished; I will get this to work in the next days.
