@@ -9,6 +9,7 @@
 import os
 import sys
 import datetime
+import pytz
 
 def wrap(txt, indent, maxln):
 	"Amazingly complex code to wrap text"
@@ -40,32 +41,65 @@ def wrap(txt, indent, maxln):
 	#print(strg)
 	return strg
 
+def mycapwd(txt):
+	"Custom version of capwords()"
+	#import string
+	ans = ''
+	for ix in range(0, len(txt)):
+		if ix == 0 or txt[ix-1] == '.' or txt[ix-1] == '-':
+			ans += txt[ix].upper()
+		else:
+			ans += txt[ix]
+	return ans
+
+def guessnm(email):
+	(acct, dom) = email.split('@')
+	# Try firstname.lastname@domain
+	acct = mycapwd(acct)
+	nms = acct.split('.')
+	if len(nms) > 1:
+		return ' '.join(nms)
+	# Try firstname@lastname.xxx
+	dom  = mycapwd(dom)
+	doms = dom.split('.')
+	return acct + ' ' + doms[0]
+
+
+
 class ParseError(ValueError):
+	"Exceptions to throw when we fail to parse RPM/DEB changelog"
 	pass
+
+RPMSEP = '-------------------------------------------------------------------'
+RPMHDR = '- '
+RPMSUB = '  * '
+DEBHDR = '  * '
+DEBSUB = '    - '
 
 class logitem:
 	"Class to hold one item"
 	def __init__(self, head=None, subitems=[]):
 		self.head = head
 		self.subitems = subitems
+	def genout(self, hdr, sub, lnln):
+		hln = len(hdr)
+		sln = len(sub)
+		strg = hdr + wrap(self.head, hln, lnln)
+		for it in self.subitems:
+			strg += '\n' + sub + wrap(it, sln, lnln)
+		return strg # + '\n'
 	def rpmout(self):
-		strg = '- ' + wrap(self.head, 2, 68) + '\n'
-		for it in self.subitems:
-			strg += '  * ' + wrap(it, 4, 68) + '\n'
-		return strg
+		return self.genout(RPMHDR, RPMSUB, 68)
 	def debout(self):
-		strg = '  * ' + wrap(self.head, 4, 70) + '\n'
-		for it in self.subitems:
-			strg += '    - ' + wrap(it, 6, 70) + '\n'
-		return strg
-	def parse(self, txt, hdst, subst, subcnt = None):
+		return self.genout(DEBHDR, DEBSUB, 70)
+	def genparse(self, txt, hdst, subst, joinln = False, subcnt = None):
 		hdln  = len(hdst)
 		subln = len(subst)
 		if not subcnt:
 			subcnt = ' '*subln
 		subcln = len(subcnt)
 		if not txt[0:hdln] == hdst:
-			raise ParseError('should start with "- "')
+			raise ParseError('should start with "%s", got "%s"' % (hdst, txt[0:hdln]))
 		ishead = True
 		self.head = ''
 		self.subitems = []
@@ -77,14 +111,20 @@ class logitem:
 					ishead = False
 					sub = ln[subln:]
 				elif ln[0:hdln] == ' '*hdln:
-					self.head += '\n' + ln
+					if joinln:
+						self.head += ln[hdln-1:]
+					else:
+						self.head += '\n' + ln
 				elif ln[0:hdln] == hdst:
 					self.head += ln[hdln:]
 				else:
 					raise ParseError('unexpected line start "%s"' % ln[0:subln]) 
 			else:
 				if ln[0:subcln] == subcnt:
-					sub += '\n' + ln
+					if joinln:
+						sub += ln[subcln-1:]
+					else:
+						sub += '\n' + ln
 				elif ln[0:subln] == subst:
 					self.subitems.append(sub)
 					sub = ln[subln:]
@@ -92,13 +132,14 @@ class logitem:
 					raise ParseError('unexpected subitem line start "%s"' % ln[0:subln])
 		if sub:
 			self.subitems.append(sub)
+		return self
 			
-	def rpmparse(self, txt):
-		self.parse(txt, '- ', '  * ')
-	def debparse(self, txt):
-		self.parse(txt, '  * ', '    - ')
-	def debparse_misssub(self, txt):
-		self.parse(txt, '  * ', '    ', '     ')
+	def rpmparse(self, txt, joinln = False):
+		return self.genparse(txt, '- ', '  * ', joinln)
+	def debparse(self, txt, joinln = False):
+		return self.genparse(txt, '  * ', '    - ', joinln)
+	def debparse_misssub(self, txt, joinln = False):
+		return self.genparse(txt, '  * ', '    ', joinln, '     ')
 
 
 class logentry:
@@ -113,7 +154,7 @@ class logentry:
 		self.urg = urg
 		self.entries = entries
 	def rpmout(self):
-		strg = '-------------------------------------------------------------------\n'
+		strg = RPMSEP + '\n'
 		strg += self.date.strftime("%a %b %d %H:%M:%S %Z %Y")
 		if strg[78] == '0':
 			strg[78] = ' '
@@ -133,6 +174,60 @@ class logentry:
 			strg[idx+6] = ' '
 		strg += '\n\n'
 		return strg
+	def rpmparse(self, txt, joinln = False):
+		self.email= ''
+		buf = ''
+		procln = 0
+		for ln in txt.splitlines():
+			procln += 1
+			# Handle separator lines
+			if ln == RPMSEP:
+				if self.email:
+					if buf:
+						#print buf
+						le = logitem().rpmparse(buf, joinln)
+						self.entries.append(le)
+					#return self
+					return procln
+				else:
+					continue
+			# Handle header
+			if not self.email:
+				(datestr, email) = ln.split(' - ')
+				self.email = email
+				tznm = datestr.split(' ')[4]
+				date = datetime.datetime.strptime(datestr, '%a %b %d %H:%M:%S %Z %Y')
+				# Search TZ
+				mylist = ['Europe/Amsterdam', 'Europe/Kiev', 'Europe/London', 'Europe/Moscow', 'America/New_York', 'America/Chicago', 'America/Denver', 'America/Los_Angeles', 'America/Sao_Paulo', 'Asia/Seoul', 'Asian/Tokyo', 'Asia/Beijing', 'Australia/Sydney', 'Africa/Johannesburg']
+				mylist.extend(list(pytz.common_timezones_set)) 
+				# CST = China Std Time and Central Std Time
+				if email.split('.')[-1] == 'cn':
+					mylist.insert(0, 'Asia/Beijing')
+				for tz in mylist:
+					tzi = pytz.timezone(tz)
+					if tzi.tzname(date) == tznm:
+						print(tz)
+						self.date = tzi.localize(date)
+						break
+				if not self.date:
+					raise ParseError("No such timezone %s" % tznm)
+				self.authnm = guessnm(email)
+				continue
+			if not ln:
+				if buf:
+					le = logitem().rpmparse(buf, joinln)
+					self.entries.append(le)
+					buf = ''
+					continue
+				else:
+					continue
+			buf += ln + '\n'
+		if buf:
+			le = logitem().rpmparse(buf, joinln)
+			self.entries.append(le)
+		#return self
+		return procln
+
 
 def main(argv):
 	#TODO: set locale to en_US
