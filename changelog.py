@@ -12,6 +12,8 @@ import datetime
 import pytz
 from six import print_
 
+plineno = 0
+
 def wrap(txt, indent, maxln):
 	"Amazingly complex code to wrap text"
 	strg = ''
@@ -67,11 +69,11 @@ def guessnm(email):
 
 
 def tzsearchlist(email):
-	mylist = ['Europe/Amsterdam', 'Europe/Kiev', 'Europe/London', 'Europe/Moscow', 'America/New_York', 'America/Chicago', 'America/Denver', 'America/Los_Angeles', 'America/Sao_Paulo', 'Asia/Seoul', 'Asia/Tokyo', 'Asia/Beijing', 'Australia/Sydney', 'Africa/Johannesburg']
+	mylist = ['Europe/Amsterdam', 'Europe/Kiev', 'Europe/London', 'Europe/Moscow', 'America/New_York', 'America/Chicago', 'America/Denver', 'America/Los_Angeles', 'America/Sao_Paulo', 'Asia/Seoul', 'Asia/Tokyo', 'Asia/Shanghai', 'Australia/Sydney', 'Africa/Johannesburg']
 	mylist.extend(list(pytz.common_timezones_set)) 
 	# CST = China Std Time and Central Std Time
 	if email and email.split('.')[-1] == 'cn':
-		mylist.insert(0, 'Asia/Beijing')
+		mylist.insert(0, 'Asia/Shanghai')
 	return mylist
 
 def findtz(tznm, date, email = ''):
@@ -106,7 +108,8 @@ def increl(prevver):
 
 class ParseError(ValueError):
 	"Exceptions to throw when we fail to parse RPM/DEB changelog"
-	pass
+	def __init__(self, errstr, ln = plineno):
+		ValueError.__init__(self, errstr + ' (line <~ %i)' % ln)
 
 RPMSEP = '-------------------------------------------------------------------'
 RPMHDR = '- '
@@ -137,19 +140,22 @@ class logitem:
 		return self.genout(DEBHDR, DEBSUB, 70)
 	def genparse(self, txt, hdst, subst, joinln = False, tolerant = False, subcnt = None):
 		"Parse one log item, consisting of head entry and (optionally) subitems"
+		txtln = txt.count('\n')
 		hdln  = len(hdst)
 		subln = len(subst)
 		if not subcnt:
 			subcnt = ' '*subln
 		subcln = len(subcnt)
 		if not txt[0:hdln] == hdst:
-			raise ParseError('should start with "%s", got "%s"' % (hdst, txt[0:hdln]))
+			raise ParseError('should start with "%s", got "%s"' % (hdst, txt[0:hdln]), plineno-txtln)
 		ishead = True
 		self.head = ''
 		self.subitems = []
 		sub = ''
+		lnno = 0
 		for ln in txt.splitlines():
 			#print_(ln)
+			lnno += 1
 			if ishead:
 				if ln[0:subln] == subst:
 					ishead = False
@@ -162,7 +168,7 @@ class logitem:
 				elif ln[0:hdln] == hdst:
 					self.head += ln[hdln:]
 				else:
-					raise ParseError('unexpected line start "%s"' % ln[0:subln]) 
+					raise ParseError('unexpected line start "%s"' % ln[0:subln], plineno-txtln+lnno)
 			else:
 				if ln[0:subcln] == subcnt:
 					if joinln:
@@ -173,7 +179,7 @@ class logitem:
 					self.subitems.append(sub)
 					sub = ln[subln:]
 				else:
-					raise ParseError('unexpected subitem line start "%s"' % ln[0:subln])
+					raise ParseError('unexpected subitem line start "%s"' % ln[0:subln], plineno-txtln+lnno)
 		if sub:
 			self.subitems.append(sub)
 		return self
@@ -199,6 +205,7 @@ class logentry:
 	import re
 	verrgx = re.compile(r'\-[0-9]*\.[^ :]*')
 	ver2rgx = re.compile(r'[uU]pdate to ([0-9]*\.[^ :]*)')
+	ver3rgx = re.compile(r'[rR]elease[: ]*([0-9]*\.[^ :]*)')
 	emerkwds = ('emergency',)
 	highkwds = ('CVE', 'exploit')
 	medkwds  = ('security', 'vulnerability', 'leak', 'major', ' critical')
@@ -246,7 +253,7 @@ class logentry:
 			ln = ent.head
 			m = logentry.verrgx.search(ln)
 			if m:
-				self.vers = m.group(0)[1:]
+				self.vers = m.group(0)[1:].rstrip('.')
 				if not self.pkgnm:
 					idx = ln.find(self.vers)
 					pidx = ln[0:idx].rfind(' ')
@@ -256,10 +263,17 @@ class logentry:
 				return
 			m = logentry.ver2rgx.search(ln)
 			if m:
-				self.vers = m.group(1)
+				self.vers = m.group(1).rstrip('.')
 				if self.vers.find('-') == -1:
 					self.vers += '-1'
 				#print_("FOUND VER2: " + self.vers)
+				return
+			m = logentry.ver3rgx.search(ln)
+			if m:
+				self.vers = m.group(1).rstrip('.')
+				if self.vers.find('-') == -1:
+					self.vers += '-1'
+				#print_("FOUND VER3: " + self.vers)
 				return
 
 	def guess_urg(self):
@@ -277,6 +291,7 @@ class logentry:
 			self.urg = 'low'
 	def rpmparse(self, txt, joinln = False, tolerant = False):
 		"Parse one RPM changelog entry section"
+		txtln = txt.count('\n')
 		self.email= ''
 		self.items = []
 		buf = ''
@@ -294,13 +309,13 @@ class logentry:
 				try:
 					(datestr, email) = ln.split(' - ')
 				except ValueError as exc:
-					raise ParseError('Could not split date - email in "%s"' % ln)
+					raise ParseError('Could not split date - email in "%s"' % ln, plineno-txtln+procln)
 				self.email = email
 				tznm = datestr.split(' ')[-2]
 				date = datetime.datetime.strptime(datestr, RPMTMF)
 				self.date = findtz(tznm, date, email).localize(date)
 				if not self.date:
-					raise ParseError("No such timezone %s" % tznm)
+					raise ParseError("No such timezone %s" % tznm, plneno-txtln+procln)
 				self.authnm = guessnm(email)
 				continue
 			# Handle empty line
@@ -332,6 +347,7 @@ class logentry:
 		#return procln
 	def debparse(self, txt, joinln = False, tolerant = False):
 		"Parse one DEB changelog entry section"
+		txtln = txt.count('\n')
 		self.urg = ''
 		self.items = []
 		buf = ''
@@ -369,7 +385,7 @@ class logentry:
 			if ln[0:4] == " -- ":
 				idx = ln.find('<')
 				if idx < 0:
-					raise ParseError("No email address in footer %s" % ln)
+					raise ParseError("No email address in footer %s" % ln, plineno-txtln+procln)
 				idx2 = ln.find('>')
 				self.authnm = ln[4:idx-1]
 				self.email = ln[idx+1:idx2]
@@ -424,8 +440,10 @@ class changelog:
 
 	def rpmparse(self, fd, joinln = False, tolerant = False):
 		"Parse full RPM changelog"
+		global plineno
 		buf = ''
 		for ln in fd:
+			plineno += 1
 			if ln == RPMSEP+'\n':
 				if buf:
 					#print_(buf)
@@ -439,8 +457,10 @@ class changelog:
 
 	def debparse(self, fd, joinln = False, tolerant = False):
 		"Parse full DEB changelog"
+		global plineno
 		buf = ''
 		for ln in fd:
+			plineno += 1
 			if ln != '\n' and ln[0] != ' ':
 				if buf:
 					#print_(buf)
