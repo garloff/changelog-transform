@@ -65,6 +65,19 @@ def guessnm(email):
 	return acct + ' ' + doms[0]
 
 
+def findtz(tznm, date, email = ''):
+	# Search TZ
+	mylist = ['Europe/Amsterdam', 'Europe/Kiev', 'Europe/London', 'Europe/Moscow', 'America/New_York', 'America/Chicago', 'America/Denver', 'America/Los_Angeles', 'America/Sao_Paulo', 'Asia/Seoul', 'Asia/Tokyo', 'Asia/Beijing', 'Australia/Sydney', 'Africa/Johannesburg']
+	mylist.extend(list(pytz.common_timezones_set)) 
+	# CST = China Std Time and Central Std Time
+	if email.split('.')[-1] == 'cn':
+		mylist.insert(0, 'Asia/Beijing')
+	for tz in mylist:
+		tzi = pytz.timezone(tz)
+		if tzi.tzname(date) == tznm:
+			return tzi
+	print("WARNING: Could not parse TZ %s" % tznm, file=sys.stderr)
+	return pytz.utc
 
 class ParseError(ValueError):
 	"Exceptions to throw when we fail to parse RPM/DEB changelog"
@@ -73,8 +86,10 @@ class ParseError(ValueError):
 RPMSEP = '-------------------------------------------------------------------'
 RPMHDR = '- '
 RPMSUB = '  * '
+RPMTMF = '%a %b %d %H:%M:%S %Z %Y'
 DEBHDR = '  * '
 DEBSUB = '    - '
+DEBTMF = '%a, %d %b %Y %H:%M:%S %z'
 
 class logitem:
 	"Class to hold one item"
@@ -155,25 +170,40 @@ class logentry:
 		self.entries = entries
 	def rpmout(self):
 		strg = RPMSEP + '\n'
-		strg += self.date.strftime("%a %b %d %H:%M:%S %Z %Y")
-		if strg[78] == '0':
-			strg[78] = ' '
+		idx = len(strg)
+		strg += self.date.strftime(RPMTMF)
+		if strg[idx+8] == '0':
+			strg = strg[0:idx+8]+' '+strg[idx+9:]
+			#strg[idx+8] = ' '
 		strg += " - %s\n\n" % self.email
 		for ent in self.entries:
 			strg += ent.rpmout() + '\n'
-		return strg
+		return strg + '\n'
 	def debout(self):
 		strg = '%s (%s) %s; urgency=%s\n\n' % (self.pkgnm, self.vers,
 							self.dist, self.urg)
 		for ent in self.entries:
 			strg += ent.debout() + '\n'
-		strg += ' -- %s <%s>  ' % (self.authnm, self.email)
+		strg += '\n -- %s <%s>  ' % (self.authnm, self.email)
 		idx = len(strg)
-		strg += self.date.strftime("%a, %d %b %Y %H:%M:%S %z")
-		if strg[idx+6] == '0':
-			strg[idx+6] = ' '
+		strg += self.date.strftime(DEBTMF)
+		if strg[idx+5] == '0':
+			strg = strg[0:idx+5]+' '+strg[idx+6:]
+			#strg[idx+6] = ' '
 		strg += '\n\n'
 		return strg
+	def guess_ver_nm(self):
+		import re
+		rgx = re.compile(r'\-[0-9]*\.[^ :]*')
+		for ent in self.entries:
+			ln = ent.head
+			m = rgx.search(ln)
+			if m:
+				self.vers = m.group(0)[1:]
+				idx = ln.find(self.vers)
+				pidx = ln[0:idx].rfind(' ')
+				self.pkgnm = ln[pidx+1:idx-1]
+				return
 	def rpmparse(self, txt, joinln = False):
 		self.email= ''
 		buf = ''
@@ -183,50 +213,45 @@ class logentry:
 			# Handle separator lines
 			if ln == RPMSEP:
 				if self.email:
-					if buf:
-						#print buf
-						le = logitem().rpmparse(buf, joinln)
-						self.entries.append(le)
-					#return self
-					return procln
+					break
 				else:
 					continue
 			# Handle header
 			if not self.email:
 				(datestr, email) = ln.split(' - ')
 				self.email = email
-				tznm = datestr.split(' ')[4]
-				date = datetime.datetime.strptime(datestr, '%a %b %d %H:%M:%S %Z %Y')
-				# Search TZ
-				mylist = ['Europe/Amsterdam', 'Europe/Kiev', 'Europe/London', 'Europe/Moscow', 'America/New_York', 'America/Chicago', 'America/Denver', 'America/Los_Angeles', 'America/Sao_Paulo', 'Asia/Seoul', 'Asian/Tokyo', 'Asia/Beijing', 'Australia/Sydney', 'Africa/Johannesburg']
-				mylist.extend(list(pytz.common_timezones_set)) 
-				# CST = China Std Time and Central Std Time
-				if email.split('.')[-1] == 'cn':
-					mylist.insert(0, 'Asia/Beijing')
-				for tz in mylist:
-					tzi = pytz.timezone(tz)
-					if tzi.tzname(date) == tznm:
-						print(tz)
-						self.date = tzi.localize(date)
-						break
+				tznm = datestr.split(' ')[-2]
+				date = datetime.datetime.strptime(datestr, RPMTMF)
+				self.date = findtz(tznm, date, email).localize(date)
 				if not self.date:
 					raise ParseError("No such timezone %s" % tznm)
 				self.authnm = guessnm(email)
 				continue
+			# Handle empty line
 			if not ln:
 				if buf:
+					#print("EMPTY: " + buf)
 					le = logitem().rpmparse(buf, joinln)
 					self.entries.append(le)
 					buf = ''
 					continue
 				else:
 					continue
+			# Handle new log item
+			if ln[0:2] == RPMHDR and buf:
+				#print("NEW: " + buf)
+				le = logitem().rpmparse(buf, joinln)
+				self.entries.append(le)
+				buf = ''
 			buf += ln + '\n'
 		if buf:
+			print(buf)
 			le = logitem().rpmparse(buf, joinln)
 			self.entries.append(le)
-		#return self
-		return procln
+		if not self.vers and not self.pkgnm:
+			self.guess_ver_nm()
+		return self
+		#return procln
 
 
 def main(argv):
