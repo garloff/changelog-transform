@@ -97,6 +97,7 @@ class logitem:
 		self.head = head
 		self.subitems = subitems
 	def genout(self, hdr, sub, lnln):
+		"return generic output string"
 		hln = len(hdr)
 		sln = len(sub)
 		strg = hdr + wrap(self.head, hln, lnln)
@@ -104,10 +105,13 @@ class logitem:
 			strg += '\n' + sub + wrap(it, sln, lnln)
 		return strg # + '\n'
 	def rpmout(self):
+		"RPM formatted output"
 		return self.genout(RPMHDR, RPMSUB, 68)
 	def debout(self):
+		"DEB formatted output"
 		return self.genout(DEBHDR, DEBSUB, 70)
 	def genparse(self, txt, hdst, subst, joinln = False, subcnt = None):
+		"Parse one log item, consisting of head entry and (optionally) subitems"
 		hdln  = len(hdst)
 		subln = len(subst)
 		if not subcnt:
@@ -155,14 +159,24 @@ class logitem:
 		return self.genparse(txt, '  * ', '    - ', joinln)
 	def debparse_misssub(self, txt, joinln = False):
 		return self.genparse(txt, '  * ', '    ', joinln, '     ')
+	def contains(self, slist):
+		for strg in slist:
+			if strg in self.head:
+				return True
+			for sit in self.subitems:
+				if strg in sit:
+					return True
+		return False
 
 
 class logentry:
 	"Class to hold one changelog entry data"
 	import re
 	verrgx = re.compile(r'\-[0-9]*\.[^ :]*')
-	def __init__(self, date=None, email=None, authnm=None, pkgnm=None, vers=None, dist='stable', urg='low', entries=[]):
-		import re
+	emerkwds = ('emergency',)
+	highkwds = ('CVE', 'exploit')
+	medkwds  = ('security', 'vulnerability', 'leak', 'major', ' critical')
+	def __init__(self, date=None, email=None, authnm=None, pkgnm=None, vers=None, dist='stable', urg='', entries=[]):
 		self.date = date
 		self.email = email
 		self.authnm = authnm
@@ -172,6 +186,7 @@ class logentry:
 		self.urg = urg
 		self.entries = entries
 	def rpmout(self):
+		"Return string with RPM formatted changelog"
 		strg = RPMSEP + '\n'
 		idx = len(strg)
 		strg += self.date.strftime(RPMTMF)
@@ -182,8 +197,14 @@ class logentry:
 		for ent in self.entries:
 			strg += ent.rpmout() + '\n'
 		return strg + '\n'
-	def debout(self):
-		strg = '%s (%s) %s; urgency=%s\n\n' % (self.pkgnm, self.vers,
+	def debout(self, prevver = ''):
+		"Return string with DEB formatted changelog"
+		vers = self.vers
+		if not vers and prevver:
+			pver = prevver.split('-')
+			pver[-1] = str(int(pver[-1])+1)
+			vers = '-'.join(pver)
+		strg = '%s (%s) %s; urgency=%s\n\n' % (self.pkgnm, vers,
 							self.dist, self.urg)
 		for ent in self.entries:
 			strg += ent.debout() + '\n'
@@ -196,6 +217,7 @@ class logentry:
 		strg += '\n\n'
 		return strg
 	def guess_ver_nm(self):
+		"Try to determine pkg version and name from changelog text"
 		for ent in self.entries:
 			ln = ent.head
 			m = logentry.verrgx.search(ln)
@@ -205,8 +227,24 @@ class logentry:
 					idx = ln.find(self.vers)
 					pidx = ln[0:idx].rfind(' ')
 					self.pkgnm = ln[pidx+1:idx-1]
+				if self.vers.find('-') == -1:
+					self.vers += '-1'
 				return
+	def guess_urg(self):
+		"Guess urgency"
+		for ent in self.entries:
+			if ent.contains(logentry.emerkwds):
+				self.urg = 'emergency'
+				return
+			if ent.contains(logentry.highkwds):
+				self.urg = 'high'
+				return
+			if ent.contains(logentry.medkwds):
+				self.urg = 'medium'
+		if not self.urg:
+			self.urg = 'low'
 	def rpmparse(self, txt, joinln = False):
+		"Parse one RPM changelog entry section"
 		self.email= ''
 		self.entries = []
 		buf = ''
@@ -253,6 +291,8 @@ class logentry:
 			self.entries.append(le)
 		if not self.vers:
 			self.guess_ver_nm()
+		if not self.urg:
+			self.guess_urg()
 		return self
 		#return procln
 
