@@ -435,8 +435,19 @@ class changelog:
 			self.entries.append(logentry(authnm = self.authover, pkgnm = self.pkgnm, dist = self.distover, urg = self.urgover).rpmparse(buf))
 		return self
 
+	def debparse(self, fd, joinln = False):
+		"Parse full DEB changelog"
+		buf = ''
+		for ln in fd:
+			if ln != '\n' and ln[0] != ' ':
+				if buf:
+					#print(buf)
+					self.entries.append(logentry(authnm = self.authover, pkgnm = self.pkgnm, dist = self.distover, urg = self.urgover).debparse(buf))
+					buf = ''
+			buf += ln
+		if buf:
+			print(buf)
+			self.entries.append(logentry(authnm = self.authover, pkgnm = self.pkgnm, dist = self.distover, urg = self.urgover).debparse(buf))
+		return self
 
 
-def main(argv):
-	#TODO: set locale to en_US
-	pass
