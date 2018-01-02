@@ -10,5 +10,5 @@ work on top of it if computers can do the job.
 
 As of 2018-02-01, the changelog.py library is mostly complete and even somewhat
 tested. What is needed still:
-* Frontend CLI tool
 * More tolerance against strangely formatted changelogs
+* Ability to have maps of email -> name translations
