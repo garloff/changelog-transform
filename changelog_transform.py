@@ -159,7 +159,10 @@ class logitem:
 
 class logentry:
 	"Class to hold one changelog entry data"
+	import re
+	verrgx = re.compile(r'\-[0-9]*\.[^ :]*')
 	def __init__(self, date=None, email=None, authnm=None, pkgnm=None, vers=None, dist='stable', urg='low', entries=[]):
+		import re
 		self.date = date
 		self.email = email
 		self.authnm = authnm
@@ -193,19 +196,19 @@ class logentry:
 		strg += '\n\n'
 		return strg
 	def guess_ver_nm(self):
-		import re
-		rgx = re.compile(r'\-[0-9]*\.[^ :]*')
 		for ent in self.entries:
 			ln = ent.head
-			m = rgx.search(ln)
+			m = logentry.verrgx.search(ln)
 			if m:
 				self.vers = m.group(0)[1:]
-				idx = ln.find(self.vers)
-				pidx = ln[0:idx].rfind(' ')
-				self.pkgnm = ln[pidx+1:idx-1]
+				if not self.pkgnm:
+					idx = ln.find(self.vers)
+					pidx = ln[0:idx].rfind(' ')
+					self.pkgnm = ln[pidx+1:idx-1]
 				return
 	def rpmparse(self, txt, joinln = False):
 		self.email= ''
+		self.entries = []
 		buf = ''
 		procln = 0
 		for ln in txt.splitlines():
@@ -248,7 +251,7 @@ class logentry:
 			print(buf)
 			le = logitem().rpmparse(buf, joinln)
 			self.entries.append(le)
-		if not self.vers and not self.pkgnm:
+		if not self.vers:
 			self.guess_ver_nm()
 		return self
 		#return procln
