@@ -10,6 +10,7 @@ import os
 import sys
 import datetime
 import pytz
+from six import print_
 
 def wrap(txt, indent, maxln):
 	"Amazingly complex code to wrap text"
@@ -38,7 +39,7 @@ def wrap(txt, indent, maxln):
 			strg += txt[idx:idx+sep] + '\n' + ' '*indent
 			idx += sep+1
 	strg += txt[idx:]
-	#print(strg)
+	#print_(strg)
 	return strg
 
 def mycapwd(txt):
@@ -80,7 +81,7 @@ def findtz(tznm, date, email = ''):
 		tzi = pytz.timezone(tz)
 		if tzi.tzname(date) == tznm:
 			return tzi
-	print("WARNING: Could not parse TZ %s" % tznm, file=sys.stderr)
+	print_("WARNING: Could not parse TZ %s" % tznm, file=sys.stderr)
 	return pytz.utc
 
 def findtzoff(offstr, date, email = ''):
@@ -94,7 +95,7 @@ def findtzoff(offstr, date, email = ''):
 		tzi = pytz.timezone(tz)
 		if tzi.utcoffset(dt) == off:
 			return tzi
-	print("WARNING: Could not parse TZ %s" % tznm, file=sys.stderr)
+	print_("WARNING: Could not parse TZ %s" % tznm, file=sys.stderr)
 	return pytz.utc
 
 def increl(prevver):
@@ -148,7 +149,7 @@ class logitem:
 		self.subitems = []
 		sub = ''
 		for ln in txt.splitlines():
-			#print(ln)
+			#print_(ln)
 			if ishead:
 				if ln[0:subln] == subst:
 					ishead = False
@@ -258,7 +259,7 @@ class logentry:
 				self.vers = m.group(1)
 				if self.vers.find('-') == -1:
 					self.vers += '-1'
-				#print("FOUND VER2: " + self.vers)
+				#print_("FOUND VER2: " + self.vers)
 				return
 
 	def guess_urg(self):
@@ -305,7 +306,7 @@ class logentry:
 			# Handle empty line
 			if not ln:
 				if buf:
-					#print("EMPTY: " + buf)
+					#print_("EMPTY: " + buf)
 					le = logitem().rpmparse(buf, joinln)
 					self.items.append(le)
 					buf = ''
@@ -314,13 +315,13 @@ class logentry:
 					continue
 			# Handle new log item
 			if ln[0:2] == RPMHDR and buf:
-				#print("NEW: " + buf)
+				#print_("NEW: " + buf)
 				le = logitem().rpmparse(buf, joinln)
 				self.items.append(le)
 				buf = ''
 			buf += ln + '\n'
 		if buf:
-			#print("END: "+ buf)
+			#print_("END: "+ buf)
 			le = logitem().rpmparse(buf, joinln)
 			self.items.append(le)
 		if not self.vers:
@@ -351,7 +352,7 @@ class logentry:
 			# Handle empty line
 			if not ln:
 				if buf:
-					#print("EMPTY: " + buf)
+					#print_("EMPTY: " + buf)
 					le = logitem().debparse(buf, joinln)
 					self.items.append(le)
 					buf = ''
@@ -360,7 +361,7 @@ class logentry:
 					continue
 			# Handle new log item
 			if ln[0:4] == DEBHDR and buf:
-				#print("NEW: " + buf)
+				#print_("NEW: " + buf)
 				le = logitem().debparse(buf, joinln)
 				self.items.append(le)
 				buf = ''
@@ -380,7 +381,7 @@ class logentry:
 			# Normal line, process ...
 			buf += ln + '\n'
 		if buf:
-			#print("END: "+ buf)
+			#print_("END: "+ buf)
 			le = logitem().debparse(buf, joinln)
 			self.items.append(le)
 		return self
@@ -426,12 +427,12 @@ class changelog:
 		for ln in fd:
 			if ln == RPMSEP+'\n':
 				if buf:
-					#print(buf)
+					#print_(buf)
 					self.entries.append(logentry(authnm = self.authover, pkgnm = self.pkgnm, dist = self.distover, urg = self.urgover).rpmparse(buf))
 					buf = ''
 			buf += ln
 		if buf:
-			#print(buf)
+			#print_(buf)
 			self.entries.append(logentry(authnm = self.authover, pkgnm = self.pkgnm, dist = self.distover, urg = self.urgover).rpmparse(buf))
 		return self
 
@@ -441,12 +442,12 @@ class changelog:
 		for ln in fd:
 			if ln != '\n' and ln[0] != ' ':
 				if buf:
-					#print(buf)
+					#print_(buf)
 					self.entries.append(logentry(authnm = self.authover, pkgnm = self.pkgnm, dist = self.distover, urg = self.urgover).debparse(buf))
 					buf = ''
 			buf += ln
 		if buf:
-			#print(buf)
+			#print_(buf)
 			self.entries.append(logentry(authnm = self.authover, pkgnm = self.pkgnm, dist = self.distover, urg = self.urgover).debparse(buf))
 		return self
 
