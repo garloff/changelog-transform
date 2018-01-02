@@ -135,7 +135,7 @@ class logitem:
 	def debout(self):
 		"DEB formatted output"
 		return self.genout(DEBHDR, DEBSUB, 70)
-	def genparse(self, txt, hdst, subst, joinln = False, subcnt = None):
+	def genparse(self, txt, hdst, subst, joinln = False, tolerant = False, subcnt = None):
 		"Parse one log item, consisting of head entry and (optionally) subitems"
 		hdln  = len(hdst)
 		subln = len(subst)
@@ -178,12 +178,12 @@ class logitem:
 			self.subitems.append(sub)
 		return self
 			
-	def rpmparse(self, txt, joinln = False):
-		return self.genparse(txt, '- ', '  * ', joinln)
-	def debparse(self, txt, joinln = False):
-		return self.genparse(txt, '  * ', '    - ', joinln)
-	def debparse_misssub(self, txt, joinln = False):
-		return self.genparse(txt, '  * ', '    ', joinln, '     ')
+	def rpmparse(self, txt, joinln = False, tolerant = False):
+		return self.genparse(txt, '- ', '  * ', joinln, tolerant)
+	def debparse(self, txt, joinln = False, tolerant = False):
+		return self.genparse(txt, '  * ', '    - ', joinln, tolerant)
+	def debparse_misssub(self, txt, joinln = False, tolerant = False):
+		return self.genparse(txt, '  * ', '    ', joinln, tolerant, '     ')
 	def contains(self, slist):
 		for strg in slist:
 			if strg in self.head:
@@ -275,7 +275,7 @@ class logentry:
 				self.urg = 'medium'
 		if not self.urg:
 			self.urg = 'low'
-	def rpmparse(self, txt, joinln = False):
+	def rpmparse(self, txt, joinln = False, tolerant = False):
 		"Parse one RPM changelog entry section"
 		self.email= ''
 		self.items = []
@@ -307,7 +307,7 @@ class logentry:
 			if not ln:
 				if buf:
 					#print_("EMPTY: " + buf)
-					le = logitem().rpmparse(buf, joinln)
+					le = logitem().rpmparse(buf, joinln, tolerant)
 					self.items.append(le)
 					buf = ''
 					continue
@@ -316,13 +316,13 @@ class logentry:
 			# Handle new log item
 			if ln[0:2] == RPMHDR and buf:
 				#print_("NEW: " + buf)
-				le = logitem().rpmparse(buf, joinln)
+				le = logitem().rpmparse(buf, joinln, tolerant)
 				self.items.append(le)
 				buf = ''
 			buf += ln + '\n'
 		if buf:
 			#print_("END: "+ buf)
-			le = logitem().rpmparse(buf, joinln)
+			le = logitem().rpmparse(buf, joinln, tolerant)
 			self.items.append(le)
 		if not self.vers:
 			self.guess_ver_nm()
@@ -330,7 +330,7 @@ class logentry:
 			self.guess_urg()
 		return self
 		#return procln
-	def debparse(self, txt, joinln = False):
+	def debparse(self, txt, joinln = False, tolerant = False):
 		"Parse one DEB changelog entry section"
 		self.urg = ''
 		self.items = []
@@ -353,7 +353,7 @@ class logentry:
 			if not ln:
 				if buf:
 					#print_("EMPTY: " + buf)
-					le = logitem().debparse(buf, joinln)
+					le = logitem().debparse(buf, joinln, tolerant)
 					self.items.append(le)
 					buf = ''
 					continue
@@ -362,7 +362,7 @@ class logentry:
 			# Handle new log item
 			if ln[0:4] == DEBHDR and buf:
 				#print_("NEW: " + buf)
-				le = logitem().debparse(buf, joinln)
+				le = logitem().debparse(buf, joinln, tolerant)
 				self.items.append(le)
 				buf = ''
 			# Handle footer
@@ -382,7 +382,7 @@ class logentry:
 			buf += ln + '\n'
 		if buf:
 			#print_("END: "+ buf)
-			le = logitem().debparse(buf, joinln)
+			le = logitem().debparse(buf, joinln, tolerant)
 			self.items.append(le)
 		return self
 		#return procln
@@ -422,34 +422,34 @@ class changelog:
 			strg += ent.debout()
 		return strg
 
-	def rpmparse(self, fd, joinln = False):
+	def rpmparse(self, fd, joinln = False, tolerant = False):
 		"Parse full RPM changelog"
 		buf = ''
 		for ln in fd:
 			if ln == RPMSEP+'\n':
 				if buf:
 					#print_(buf)
-					self.entries.append(logentry(authnm = self.authover, pkgnm = self.pkgnm, dist = self.distover, urg = self.urgover).rpmparse(buf))
+					self.entries.append(logentry(authnm = self.authover, pkgnm = self.pkgnm, dist = self.distover, urg = self.urgover).rpmparse(buf, joinln, tolerant))
 					buf = ''
 			buf += ln
 		if buf:
 			#print_(buf)
-			self.entries.append(logentry(authnm = self.authover, pkgnm = self.pkgnm, dist = self.distover, urg = self.urgover).rpmparse(buf))
+			self.entries.append(logentry(authnm = self.authover, pkgnm = self.pkgnm, dist = self.distover, urg = self.urgover).rpmparse(buf, joinln, tolerant))
 		return self
 
-	def debparse(self, fd, joinln = False):
+	def debparse(self, fd, joinln = False, tolerant = False):
 		"Parse full DEB changelog"
 		buf = ''
 		for ln in fd:
 			if ln != '\n' and ln[0] != ' ':
 				if buf:
 					#print_(buf)
-					self.entries.append(logentry(authnm = self.authover, pkgnm = self.pkgnm, dist = self.distover, urg = self.urgover).debparse(buf))
+					self.entries.append(logentry(authnm = self.authover, pkgnm = self.pkgnm, dist = self.distover, urg = self.urgover).debparse(buf, joinln, tolerant))
 					buf = ''
 			buf += ln
 		if buf:
 			#print_(buf)
-			self.entries.append(logentry(authnm = self.authover, pkgnm = self.pkgnm, dist = self.distover, urg = self.urgover).debparse(buf))
+			self.entries.append(logentry(authnm = self.authover, pkgnm = self.pkgnm, dist = self.distover, urg = self.urgover).debparse(buf, joinln, tolerant))
 		return self
 
 
