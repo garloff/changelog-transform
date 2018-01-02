@@ -97,6 +97,12 @@ def findtzoff(offstr, date, email = ''):
 	print("WARNING: Could not parse TZ %s" % tznm, file=sys.stderr)
 	return pytz.utc
 
+def increl(prevver):
+	"Incr. -release string by one"
+	pver = prevver.split('-')
+	pver[-1] = str(int(pver[-1])+1)
+	return '-'.join(pver)
+
 class ParseError(ValueError):
 	"Exceptions to throw when we fail to parse RPM/DEB changelog"
 	pass
@@ -191,10 +197,11 @@ class logentry:
 	"Class to hold one changelog entry data"
 	import re
 	verrgx = re.compile(r'\-[0-9]*\.[^ :]*')
+	ver2rgx = re.compile(r'[uU]pdate to ([0-9]*\.[^ :]*)')
 	emerkwds = ('emergency',)
 	highkwds = ('CVE', 'exploit')
 	medkwds  = ('security', 'vulnerability', 'leak', 'major', ' critical')
-	def __init__(self, date=None, email=None, authnm=None, pkgnm=None, vers=None, dist='stable', urg='', entries=[]):
+	def __init__(self, date=None, email=None, authnm=None, pkgnm=None, vers=None, dist='stable', urg='', items=[]):
 		self.date = date
 		self.email = email
 		self.authnm = authnm
@@ -202,7 +209,7 @@ class logentry:
 		self.vers = vers
 		self.dist = dist
 		self.urg = urg
-		self.entries = entries
+		self.items = items
 	def rpmout(self):
 		"Return string with RPM formatted changelog"
 		strg = RPMSEP + '\n'
@@ -212,19 +219,17 @@ class logentry:
 			strg = strg[0:idx+8]+' '+strg[idx+9:]
 			#strg[idx+8] = ' '
 		strg += " - %s\n\n" % self.email
-		for ent in self.entries:
+		for ent in self.items:
 			strg += ent.rpmout() + '\n'
 		return strg + '\n'
 	def debout(self, prevver = ''):
 		"Return string with DEB formatted changelog"
 		vers = self.vers
 		if not vers and prevver:
-			pver = prevver.split('-')
-			pver[-1] = str(int(pver[-1])+1)
-			vers = '-'.join(pver)
+			vers = increl(prevver)
 		strg = '%s (%s) %s; urgency=%s\n\n' % (self.pkgnm, vers,
 							self.dist, self.urg)
-		for ent in self.entries:
+		for ent in self.items:
 			strg += ent.debout() + '\n'
 		strg += '\n -- %s <%s>  ' % (self.authnm, self.email)
 		idx = len(strg)
@@ -236,7 +241,7 @@ class logentry:
 		return strg
 	def guess_ver_nm(self):
 		"Try to determine pkg version and name from changelog text"
-		for ent in self.entries:
+		for ent in self.items:
 			ln = ent.head
 			m = logentry.verrgx.search(ln)
 			if m:
@@ -248,9 +253,17 @@ class logentry:
 				if self.vers.find('-') == -1:
 					self.vers += '-1'
 				return
+			m = logentry.ver2rgx.search(ln)
+			if m:
+				self.vers = m.group(1)
+				if self.vers.find('-') == -1:
+					self.vers += '-1'
+				#print("FOUND VER2: " + self.vers)
+				return
+
 	def guess_urg(self):
 		"Guess urgency"
-		for ent in self.entries:
+		for ent in self.items:
 			if ent.contains(logentry.emerkwds):
 				self.urg = 'emergency'
 				return
@@ -264,7 +277,7 @@ class logentry:
 	def rpmparse(self, txt, joinln = False):
 		"Parse one RPM changelog entry section"
 		self.email= ''
-		self.entries = []
+		self.items = []
 		buf = ''
 		procln = 0
 		for ln in txt.splitlines():
@@ -277,7 +290,10 @@ class logentry:
 					continue
 			# Handle header
 			if not self.email:
-				(datestr, email) = ln.split(' - ')
+				try:
+					(datestr, email) = ln.split(' - ')
+				except ValueError as exc:
+					raise ParseError('Could not split date - email in "%s"' % ln)
 				self.email = email
 				tznm = datestr.split(' ')[-2]
 				date = datetime.datetime.strptime(datestr, RPMTMF)
@@ -291,7 +307,7 @@ class logentry:
 				if buf:
 					#print("EMPTY: " + buf)
 					le = logitem().rpmparse(buf, joinln)
-					self.entries.append(le)
+					self.items.append(le)
 					buf = ''
 					continue
 				else:
@@ -300,13 +316,13 @@ class logentry:
 			if ln[0:2] == RPMHDR and buf:
 				#print("NEW: " + buf)
 				le = logitem().rpmparse(buf, joinln)
-				self.entries.append(le)
+				self.items.append(le)
 				buf = ''
 			buf += ln + '\n'
 		if buf:
 			#print("END: "+ buf)
 			le = logitem().rpmparse(buf, joinln)
-			self.entries.append(le)
+			self.items.append(le)
 		if not self.vers:
 			self.guess_ver_nm()
 		if not self.urg:
@@ -316,7 +332,7 @@ class logentry:
 	def debparse(self, txt, joinln = False):
 		"Parse one DEB changelog entry section"
 		self.urg = ''
-		self.entries = []
+		self.items = []
 		buf = ''
 		procln = 0
 		for ln in txt.splitlines():
@@ -337,7 +353,7 @@ class logentry:
 				if buf:
 					#print("EMPTY: " + buf)
 					le = logitem().debparse(buf, joinln)
-					self.entries.append(le)
+					self.items.append(le)
 					buf = ''
 					continue
 				else:
@@ -346,7 +362,7 @@ class logentry:
 			if ln[0:4] == DEBHDR and buf:
 				#print("NEW: " + buf)
 				le = logitem().debparse(buf, joinln)
-				self.entries.append(le)
+				self.items.append(le)
 				buf = ''
 			# Handle footer
 			if ln[0:4] == " -- ":
@@ -366,9 +382,59 @@ class logentry:
 		if buf:
 			#print("END: "+ buf)
 			le = logitem().debparse(buf, joinln)
-			self.entries.append(le)
+			self.items.append(le)
 		return self
 		#return procln
+
+class changelog:
+	"Container for full changelog"
+	def __init__(self, pkgnm=None, authover=None, distover=None, urgover='', entries=[]):
+		self.pkgnm = pkgnm
+		self.authover = authover
+		self.distover = distover
+		self.urgover = urgover
+		self.entries = entries
+	def rpmout(self):
+		"output RPM changelog as string"
+		strg = ''
+		for ent in self.entries:
+			strg += ent.rpmout()
+		return strg
+	def fixupdebver(self):
+		"fill in missing versions by guessing ..."
+		lastver = '?-0'
+		lastpkg = None
+		for idx in range(len(self.entries)-1, -1, -1):
+			if not self.entries[idx].vers:
+				self.entries[idx].vers = increl(lastver)
+			if lastpkg and not self.entries[idx].pkgnm:
+				self.entries[idx].pkgnm = lastpkg
+			elif not lastpkg:
+				lastpkg = self.entries[idx].pkgnm
+			lastver = self.entries[idx].vers
+	def debout(self):
+		"output DEB changelog as string"
+		self.fixupdebver()
+		strg = ''
+		for ent in self.entries:
+			strg += ent.debout()
+		return strg
+
+	def rpmparse(self, fd, joinln = False):
+		"Parse full RPM changelog"
+		buf = ''
+		for ln in fd:
+			if ln == RPMSEP+'\n':
+				if buf:
+					#print(buf)
+					self.entries.append(logentry(authnm = self.authover, pkgnm = self.pkgnm, dist = self.distover, urg = self.urgover).rpmparse(buf))
+					buf = ''
+			buf += ln
+		if buf:
+			#print(buf)
+			self.entries.append(logentry(authnm = self.authover, pkgnm = self.pkgnm, dist = self.distover, urg = self.urgover).rpmparse(buf))
+		return self
+
 
 
 def main(argv):
