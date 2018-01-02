@@ -389,11 +389,12 @@ class logentry:
 
 class changelog:
 	"Container for full changelog"
-	def __init__(self, pkgnm=None, authover=None, distover='stable', urgover='', entries=[]):
+	def __init__(self, pkgnm=None, authover=None, distover='stable', urgover='', initver = '?-0', entries=[]):
 		self.pkgnm = pkgnm
 		self.authover = authover
 		self.distover = distover
 		self.urgover = urgover
+		self.initver = initver
 		self.entries = entries
 	def rpmout(self):
 		"output RPM changelog as string"
@@ -403,7 +404,7 @@ class changelog:
 		return strg
 	def fixupdebver(self):
 		"fill in missing versions by guessing ..."
-		lastver = '?-0'
+		lastver = self.initver
 		lastpkg = None
 		for idx in range(len(self.entries)-1, -1, -1):
 			if not self.entries[idx].vers:
