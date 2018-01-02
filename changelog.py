@@ -388,7 +388,7 @@ class logentry:
 
 class changelog:
 	"Container for full changelog"
-	def __init__(self, pkgnm=None, authover=None, distover=None, urgover='', entries=[]):
+	def __init__(self, pkgnm=None, authover=None, distover='stable', urgover='', entries=[]):
 		self.pkgnm = pkgnm
 		self.authover = authover
 		self.distover = distover
@@ -446,7 +446,7 @@ class changelog:
 					buf = ''
 			buf += ln
 		if buf:
-			print(buf)
+			#print(buf)
 			self.entries.append(logentry(authnm = self.authover, pkgnm = self.pkgnm, dist = self.distover, urg = self.urgover).debparse(buf))
 		return self
 
