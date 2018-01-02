@@ -65,16 +65,34 @@ def guessnm(email):
 	return acct + ' ' + doms[0]
 
 
-def findtz(tznm, date, email = ''):
-	# Search TZ
+def tzsearchlist(email):
 	mylist = ['Europe/Amsterdam', 'Europe/Kiev', 'Europe/London', 'Europe/Moscow', 'America/New_York', 'America/Chicago', 'America/Denver', 'America/Los_Angeles', 'America/Sao_Paulo', 'Asia/Seoul', 'Asia/Tokyo', 'Asia/Beijing', 'Australia/Sydney', 'Africa/Johannesburg']
 	mylist.extend(list(pytz.common_timezones_set)) 
 	# CST = China Std Time and Central Std Time
-	if email.split('.')[-1] == 'cn':
+	if email and email.split('.')[-1] == 'cn':
 		mylist.insert(0, 'Asia/Beijing')
+	return mylist
+
+def findtz(tznm, date, email = ''):
+	"Find timezone by abbreviation, use heuristics"
+	mylist = tzsearchlist(email)
 	for tz in mylist:
 		tzi = pytz.timezone(tz)
 		if tzi.tzname(date) == tznm:
+			return tzi
+	print("WARNING: Could not parse TZ %s" % tznm, file=sys.stderr)
+	return pytz.utc
+
+def findtzoff(offstr, date, email = ''):
+	"Find timezone by UTC offset, use heuristics"
+	mylist = tzsearchlist(email)
+	sgn = -1 if offstr[0] == '-' else 1
+	off = datetime.timedelta(0, sgn*60*(60*int(offstr[1:3])+int(offstr[3:5])))
+	# Need naive datetime
+	dt = datetime.datetime(date.year, date.month, date.day, date.hour, date.minute, date.second)
+	for tz in mylist:
+		tzi = pytz.timezone(tz)
+		if tzi.utcoffset(dt) == off:
 			return tzi
 	print("WARNING: Could not parse TZ %s" % tznm, file=sys.stderr)
 	return pytz.utc
@@ -286,13 +304,69 @@ class logentry:
 				buf = ''
 			buf += ln + '\n'
 		if buf:
-			print(buf)
+			#print("END: "+ buf)
 			le = logitem().rpmparse(buf, joinln)
 			self.entries.append(le)
 		if not self.vers:
 			self.guess_ver_nm()
 		if not self.urg:
 			self.guess_urg()
+		return self
+		#return procln
+	def debparse(self, txt, joinln = False):
+		"Parse one DEB changelog entry section"
+		self.urg = ''
+		self.entries = []
+		buf = ''
+		procln = 0
+		for ln in txt.splitlines():
+			procln += 1
+			# Handle separator lines
+			if ln and ln[0] != ' ':
+				if self.email:
+					break
+			# Handle header
+			if not self.pkgnm:
+				(self.pkgnm, vers, dist, urg) = ln.split(' ')
+				self.vers = vers[1:-1]
+				self.dist = dist[0:-1]
+				self.urg = urg[8:]
+				continue
+			# Handle empty line
+			if not ln:
+				if buf:
+					#print("EMPTY: " + buf)
+					le = logitem().debparse(buf, joinln)
+					self.entries.append(le)
+					buf = ''
+					continue
+				else:
+					continue
+			# Handle new log item
+			if ln[0:4] == DEBHDR and buf:
+				#print("NEW: " + buf)
+				le = logitem().debparse(buf, joinln)
+				self.entries.append(le)
+				buf = ''
+			# Handle footer
+			if ln[0:4] == " -- ":
+				idx = ln.find('<')
+				if idx < 0:
+					raise ParseError("No email address in footer %s" % ln)
+				idx2 = ln.find('>')
+				self.authnm = ln[4:idx-1]
+				self.email = ln[idx+1:idx2]
+				self.date = datetime.datetime.strptime(ln[idx2+3:], DEBTMF)
+				tzi = findtzoff(ln[-5:], self.date, self.email)
+				if tzi.zone != 'UTC':
+					self.date = self.date.astimezone(tzi)
+				break
+			# Normal line, process ...
+			buf += ln + '\n'
+		if buf:
+			#print("END: "+ buf)
+			le = logitem().debparse(buf, joinln)
+			self.entries.append(le)
 		return self
 		#return procln
 
