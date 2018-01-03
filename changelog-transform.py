@@ -51,7 +51,7 @@ def parsemailaddr(addr):
 	if idx < 0 or idx2 < 0:
 		raise ValueError("Invalid Mail Address \"%s\"" % addr)
 	nm = addr[:idx].lstrip(' ').rstrip(' ')
-	return (addr[idx+1:idx2], nm)
+	return (addr[idx+1:idx2].lower(), nm)
 
 
 def parse_args(argv):
@@ -157,6 +157,7 @@ class emailsdb:
 			db[it] = addrs[it]
 		return self
 	def __getitem__(self, srch):
+		srch = srch.lower()
 		try:
 			nm = self.emaildb[srch]
 		except KeyError:
@@ -170,6 +171,7 @@ class emailsdb:
 					self.addrappend(GMAILDB, {srch: nm})
 			else:
 				raise ValueError('No such email %s <%s>' % (nm, srch))
+		return nm
 
 def main(argv):
 	global infmt, outfmt, pkgnm, emails
