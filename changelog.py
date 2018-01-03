@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 #
-# Tool to transform debian.changelog into RPM .changes files
-# and vice versa
+# Classes to hold RPM .changes and debian.changelog information and to do
+# conversions with them.
+#
+# Ensure that you have a POSIX or en_US.UTF-8 locale when using this.
 #
 # (c) Kurt Garloff <kurt@garloff.de>, 1/2018
 # License: CC-BY-SA 3.0
@@ -438,10 +440,11 @@ class changelog:
 			strg += ent.debout()
 		return strg
 
-	def rpmparse(self, fd, joinln = False, tolerant = False):
+	def rpmparse(self, fd, joinln = False, tolerant = False, maxent = 0):
 		"Parse full RPM changelog"
 		global plineno
 		buf = ''
+		ent = 0
 		for ln in fd:
 			plineno += 1
 			if ln == RPMSEP+'\n':
@@ -449,16 +452,20 @@ class changelog:
 					#print_(buf)
 					self.entries.append(logentry(authnm = self.authover, pkgnm = self.pkgnm, dist = self.distover, urg = self.urgover).rpmparse(buf, joinln, tolerant))
 					buf = ''
+				ent += 1
+				if maxent and ent > maxent:
+					break
 			buf += ln
 		if buf:
 			#print_(buf)
 			self.entries.append(logentry(authnm = self.authover, pkgnm = self.pkgnm, dist = self.distover, urg = self.urgover).rpmparse(buf, joinln, tolerant))
 		return self
 
-	def debparse(self, fd, joinln = False, tolerant = False):
+	def debparse(self, fd, joinln = False, tolerant = False, maxent = 0):
 		"Parse full DEB changelog"
 		global plineno
 		buf = ''
+		ent = 0
 		for ln in fd:
 			plineno += 1
 			if ln != '\n' and ln[0] != ' ':
@@ -466,6 +473,9 @@ class changelog:
 					#print_(buf)
 					self.entries.append(logentry(authnm = self.authover, pkgnm = self.pkgnm, dist = self.distover, urg = self.urgover).debparse(buf, joinln, tolerant))
 					buf = ''
+				ent += 1
+				if maxent and ent > maxent:
+					break
 			buf += ln
 		if buf:
 			#print_(buf)

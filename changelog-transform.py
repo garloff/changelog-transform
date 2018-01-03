@@ -20,6 +20,7 @@ initver  = '?-0'
 authnm   = ''
 dist     = 'stable'
 pkgnm    = ''
+maxent   = 0
 
 def helpout(rc=1):
 	print_("Usage: changelog-transform.py [options] in out", file=sys.stderr)
@@ -35,17 +36,18 @@ def helpout(rc=1):
 	print_(" -a, --author authorname: Set authors name", file=sys.stderr)
 	print_(" -d, --distro distname: Override distro name (def=stable)", file=sys.stderr)
 	print_(" -n, --pkgname pkgnm: Set package name (def=autodetect)", file=sys.stderr)
+	print_(" -m, --maxent no: Set max number of entries to process (def=all)", file=sys.stderr)
 	sys.exit(rc)
 
 def parse_args(argv):
 	"Parse command line args"
 	import getopt
 	global quiet, verbose, infmt, outfmt, tolerant, joinln
-	global initver, authnm, dist, pkgnm
+	global initver, authnm, dist, pkgnm, maxent
 
 	# options
 	try:
-		optlist, args = getopt.gnu_getopt(argv, 'vqhi:o:trV:a:d:n:', ('help', 'quiet', 'verbose', 'tolerant', 'rewrap', 'infmt=', 'outfmt=', 'version=', 'author=', 'distro=', 'pkgname='))
+		optlist, args = getopt.gnu_getopt(argv, 'vqhi:o:trV:a:d:n:m:', ('help', 'quiet', 'verbose', 'tolerant', 'rewrap', 'infmt=', 'outfmt=', 'version=', 'author=', 'distro=', 'pkgname=', 'maxent='))
 	except getopt.GetoptError as exc:
 		print_(exc)
 		helpout(1)
@@ -79,6 +81,9 @@ def parse_args(argv):
 			continue
 		if opt == '-n' or opt == '--pkgname':
 			pkgnm = arg
+			continue
+		if opt == '-m' or opt == '--maxent':
+			maxent = int(arg)
 			continue
 		if opt == '-h' or opt == '--help':
 			helpout(0)
@@ -124,9 +129,9 @@ def main(argv):
 
 	chglog = changelog.changelog(pkgnm = pkgnm, authover = authnm, distover = dist, initver = initver)
 	if infmt == 'rpm':
-		chglog.rpmparse(infd, joinln, tolerant)
+		chglog.rpmparse(infd, joinln, tolerant, maxent)
 	elif infmt == 'deb':
-		chglog.debparse(infd, joinln, tolerant)
+		chglog.debparse(infd, joinln, tolerant, maxent)
 	else:
 		print_("ERROR: Input format %s unknown" % infmt)
 		sys.exit(3)
