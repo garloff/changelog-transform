@@ -211,7 +211,7 @@ class logentry:
 	emerkwds = ('emergency',)
 	highkwds = ('CVE', 'exploit')
 	medkwds  = ('security', 'vulnerability', 'leak', 'major', ' critical')
-	def __init__(self, date=None, email=None, authnm=None, pkgnm=None, vers=None, dist='stable', urg='', items=[]):
+	def __init__(self, date=None, email=None, authnm=None, pkgnm=None, vers=None, dist='stable', urg='', emaildb = None, items=[]):
 		self.date = date
 		self.email = email
 		self.authnm = authnm
@@ -219,6 +219,7 @@ class logentry:
 		self.vers = vers
 		self.dist = dist
 		self.urg = urg
+		self.emaildb = emaildb
 		self.items = items
 	def rpmout(self):
 		"Return string with RPM formatted changelog"
@@ -319,7 +320,14 @@ class logentry:
 				if not self.date:
 					raise ParseError("No such timezone %s" % tznm, plneno-txtln+procln)
 				if not self.authnm:
-					self.authnm = guessnm(email)
+					if self.emaildb:
+						try:
+							# Need dict-like iface (__getitem__)
+							self.authnm = self.emaildb[email]
+						except KeyError:
+							self.authnm = guessnm(email)
+					else:
+						self.authnm = guessnm(email)
 				continue
 			# Handle empty line
 			if not ln:
@@ -408,12 +416,13 @@ class logentry:
 
 class changelog:
 	"Container for full changelog"
-	def __init__(self, pkgnm=None, authover=None, distover='stable', urgover='', initver = '?-0', entries=[]):
+	def __init__(self, pkgnm=None, authover=None, distover='stable', urgover='', initver = '?-0', emaildb = None, entries=[]):
 		self.pkgnm = pkgnm
 		self.authover = authover
 		self.distover = distover
 		self.urgover = urgover
 		self.initver = initver
+		self.emaildb = emaildb
 		self.entries = entries
 	def rpmout(self):
 		"output RPM changelog as string"
@@ -451,7 +460,7 @@ class changelog:
 			if ln == RPMSEP+'\n':
 				if buf:
 					#print_(buf)
-					self.entries.append(logentry(authnm = self.authover, pkgnm = self.pkgnm, dist = self.distover, urg = self.urgover).rpmparse(buf, joinln, tolerant))
+					self.entries.append(logentry(authnm = self.authover, pkgnm = self.pkgnm, dist = self.distover, urg = self.urgover, emaildb = self.emaildb).rpmparse(buf, joinln, tolerant))
 					buf = ''
 				ent += 1
 				if maxent and ent > maxent:
@@ -459,7 +468,7 @@ class changelog:
 			buf += ln
 		if buf:
 			#print_(buf)
-			self.entries.append(logentry(authnm = self.authover, pkgnm = self.pkgnm, dist = self.distover, urg = self.urgover).rpmparse(buf, joinln, tolerant))
+			self.entries.append(logentry(authnm = self.authover, pkgnm = self.pkgnm, dist = self.distover, urg = self.urgover, emaildb = self.emaildb).rpmparse(buf, joinln, tolerant))
 		return self
 
 	def debparse(self, fd, joinln = False, tolerant = False, maxent = 0):
