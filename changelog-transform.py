@@ -50,7 +50,7 @@ def parsemailaddr(addr):
 	idx2 = addr.find('>')
 	if idx < 0 or idx2 < 0:
 		raise ValueError("Invalid Mail Address \"%s\"" % addr)
-	nm = addr[:idx].rstrip(' ')
+	nm = addr[:idx].lstrip(' ').rstrip(' ')
 	return (addr[idx+1:idx2], nm)
 
 
@@ -116,6 +116,8 @@ def parse_args(argv):
 		helpout(1)
 	return args[1:]
 
+EMAILDB = 'emaildb'
+GMAILDB = 'guessmaildb'
 
 class emailsdb:
 	def readdb(self, nm):
@@ -136,21 +138,23 @@ class emailsdb:
 		return emails
 	def __init__(self, pref=os.environ['HOME']+'/.changelog-transform/', guess=True):
 		self.pref = pref
-		self.emaildb = self.readdb("emaildb")
+		self.emaildb = self.readdb(EMAILDB)
 		self.guess = guess
 		if guess:
-			self.guessmaildb = self.readdb("guessmaildb")
+			self.guessmaildb = self.readdb(GMAILDB)
 	def addrappend(self, nm, addrs):
 		fullnm = self.pref+nm
 		fd = open(fullnm, 'a')
+		db = self.guessmaildb if nm == GMAILDB else self.emaildb
 		for it in addrs.keys():
-			val = self.emaildb.get(it)
+			val = db.get(it)
 			if val:
 				if val == addrs[it]:
 					continue
 				else:
 					raise ValueError("Will not overwrite %s <%s> with %s" % (val, it, addrs[it]))
 			print_("%s <%s>" % (addrs[it], it), file=fd)
+			db[it] = addrs[it]
 		return self
 	def __getitem__(self, srch):
 		try:
@@ -163,7 +167,7 @@ class emailsdb:
 				except:
 					#nm = changelog.guessnm(srch)
 					print_("WARN: Add %s <%s> to guessmaildb" % (nm, srch), file=sys.stderr)
-					self.addrappend("guessmaildb", {srch: nm})
+					self.addrappend(GMAILDB, {srch: nm})
 			else:
 				raise ValueError('No such email %s <%s>' % (nm, srch))
 
@@ -204,7 +208,7 @@ def main(argv):
 
 	if emaildb:
 		if emails:
-			emails = emailsdb(guess = guessmail).append(emails)
+			emails = emailsdb(guess = guessmail).addrappend(EMAILDB, emails)
 		else:
 			emails = emailsdb(guess = guessmail)
 
