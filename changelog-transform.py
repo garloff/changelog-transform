@@ -45,7 +45,7 @@ def parse_args(argv):
 
 	# options
 	try:
-		optlist, args = getopt.gnu_getopt(argv, 'vqhi:o:trV:a:d:n:', ('help', 'quiet', 'verbose', 'tolerant', 'rewrap', 'infmt', 'outfmt', 'version', 'author', 'distro', 'pkgname'))
+		optlist, args = getopt.gnu_getopt(argv, 'vqhi:o:trV:a:d:n:', ('help', 'quiet', 'verbose', 'tolerant', 'rewrap', 'infmt=', 'outfmt=', 'version=', 'author=', 'distro=', 'pkgname='))
 	except getopt.GetoptError as exc:
 		print_(exc)
 		helpout(1)
