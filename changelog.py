@@ -8,7 +8,7 @@
 # (c) Kurt Garloff <kurt@garloff.de>, 1/2018
 # License: CC-BY-SA 3.0
 
-import os
+#import os
 import sys
 import datetime
 import pytz
@@ -111,7 +111,7 @@ def increl(prevver):
 class ParseError(ValueError):
 	"Exceptions to throw when we fail to parse RPM/DEB changelog"
 	def __init__(self, errstr, ln = plineno):
-		ValueError.__init__(self, errstr + ' (line <~ %i)' % ln)
+		ValueError.__init__(self, errstr + ' (line ~ %i)' % ln)
 
 RPMSEP = '-------------------------------------------------------------------'
 RPMHDR = '- '
@@ -149,7 +149,7 @@ class logitem:
 			subcnt = ' '*subln
 		subcln = len(subcnt)
 		if not txt[0:hdln] == hdst:
-			raise ParseError('should start with "%s", got "%s"' % (hdst, txt[0:hdln]), plineno-txtln)
+			raise ParseError('should start with "%s", got "%s"' % (hdst, txt[0:hdln]), plineno-txtln-2)
 		ishead = True
 		self.head = ''
 		self.subitems = []
@@ -170,7 +170,7 @@ class logitem:
 				elif ln[0:hdln] == hdst:
 					self.head += ln[hdln:]
 				else:
-					raise ParseError('unexpected line start "%s"' % ln[0:subln], plineno-txtln+lnno)
+					raise ParseError('unexpected line start "%s"' % ln[0:subln], plineno-txtln-2+lnno)
 			else:
 				if ln[0:subcln] == subcnt:
 					if joinln:
@@ -181,7 +181,7 @@ class logitem:
 					self.subitems.append(sub)
 					sub = ln[subln:]
 				else:
-					raise ParseError('unexpected subitem line start "%s"' % ln[0:subln], plineno-txtln+lnno)
+					raise ParseError('unexpected subitem line start "%s"' % ln[0:subln], plineno-txtln-2+lnno)
 		if sub:
 			self.subitems.append(sub)
 		return self
@@ -318,7 +318,8 @@ class logentry:
 				self.date = findtz(tznm, date, email).localize(date)
 				if not self.date:
 					raise ParseError("No such timezone %s" % tznm, plneno-txtln+procln)
-				self.authnm = guessnm(email)
+				if not self.authnm:
+					self.authnm = guessnm(email)
 				continue
 			# Handle empty line
 			if not ln:
