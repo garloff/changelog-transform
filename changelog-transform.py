@@ -17,12 +17,12 @@ outfmt   = None
 tolerant = False
 joinln   = False
 initver  = '?-0'
-authnm   = ''
 dist     = 'stable'
 pkgnm    = ''
 maxent   = 0
 emails   = {}
 emaildb  = False
+guessmail= False
 
 def helpout(rc=1):
 	print_("Usage: changelog-transform.py [options] in out", file=sys.stderr)
@@ -37,22 +37,32 @@ def helpout(rc=1):
 	print_(" -m, --maxent no: Set max number of entries to process (def=all)", file=sys.stderr)
 	print_(" Options to fill in info for RPM->DEB conversions:", file=sys.stderr)
 	print_(" -V, --version x.y-r: Set initial version (def: ?-0)", file=sys.stderr)
-	print_(" -a, --author authorname: Set authors name (def: guess from addr)", file=sys.stderr)
-	print_(" -e, --emails LIST: provide list of mails \"NAME <adr> [, NAME <adr> [..]]]\"", file=sys.stderr)
-#	print_(" -E, --emaildb: use .emaildb and .guessemaildb for names", file=sys.stderr)
+	print_(" -a, --emails LIST: provide list of mails \"NAME <adr> [, NAME <adr> [..]]]\"", file=sys.stderr)
+	print_(" -e, --emaildb: use .emaildb and for names", file=sys.stderr)
+	print_(" -E, --emaildbguess: use .emaildb and .guessmaildb for names", file=sys.stderr)
 	print_(" -d, --distro distname: Override distro name (def=stable)", file=sys.stderr)
 	print_(" -n, --pkgname pkgnm: Set package name (def=autodetect)", file=sys.stderr)
 	sys.exit(rc)
+
+def parsemailaddr(addr):
+	"Return tuple email, name from Name <addr> string"
+	idx = addr.find('<')
+	idx2 = addr.find('>')
+	if idx < 0 or idx2 < 0:
+		raise ValueError("Invalid Mail Address \"%s\"" % addr)
+	nm = addr[:idx].rstrip(' ')
+	return (addr[idx+1:idx2], nm)
+
 
 def parse_args(argv):
 	"Parse command line args"
 	import getopt
 	global quiet, verbose, infmt, outfmt, tolerant, joinln
-	global initver, authnm, dist, pkgnm, maxent, emails, emaildb
+	global initver, dist, pkgnm, maxent, emails, emaildb, guessmail
 
 	# options
 	try:
-		optlist, args = getopt.gnu_getopt(argv, 'vqhi:o:trV:a:d:n:m:e:E', ('help', 'quiet', 'verbose', 'tolerant', 'rewrap', 'infmt=', 'outfmt=', 'version=', 'author=', 'distro=', 'pkgname=', 'maxent=', 'emails=', 'emaildb'))
+		optlist, args = getopt.gnu_getopt(argv, 'vqhi:o:trV:a:d:n:m:eE', ('help', 'quiet', 'verbose', 'tolerant', 'rewrap', 'infmt=', 'outfmt=', 'version=', 'distro=', 'pkgname=', 'maxent=', 'emails=', 'emaildb', 'emaildbguess'))
 	except getopt.GetoptError as exc:
 		print_(exc)
 		helpout(1)
@@ -82,20 +92,17 @@ def parse_args(argv):
 		if opt == '-V' or opt == '--version':
 			initver = arg
 			continue
-		if opt == '-a' or opt == '--author':
-			authnm = arg
-			continue
-		if opt == '-e' or opt == '--emails':
+		if opt == '-a' or opt == '--emails':
 			for addr in arg.split(','):
-				idx = addr.find('<')
-				idx2 = addr.find('>')
-				if idx < 0 or idx2 < 0:
-					raise ValueError("Invalid Mail Address \"%s\"" % addr)
-				nm = addr[:idx].rstrip(' ')
-				emails[addr[idx+1:idx2]] = nm
+				email, name = parsemailaddr(addr)
+				emails[email] = name
 			continue
-		if opt == '-E' or opt == '--emaildb':
+		if opt == '-e' or opt == '--emaildb':
 			emaildb = True
+			continue
+		if opt == '-E' or opt == '--emaildbguess':
+			emaildb = True
+			guessmail = True
 			continue
 		if opt == '-d' or opt == '--distro':
 			dist = arg
@@ -110,8 +117,58 @@ def parse_args(argv):
 	return args[1:]
 
 
+class emailsdb:
+	def readdb(self, nm):
+		fullnm = self.pref+nm
+		emails = {}
+		if not os.access(os.path.dirname(fullnm), os.X_OK):
+			os.mkdir(os.path.dirname(fullnm), mode=0o750)
+		if not os.access(fullnm, os.R_OK):
+			open(fullnm, 'x').write('#EMail Address Database %s for changlog-transform.py\n' % nm)
+			return emails
+		fd = open(fullnm, 'r')
+		for ln in fd:
+			ln = ln.rstrip('\n')
+			if not ln or ln[0] == '#':
+				continue
+			email, name = parsemailaddr(ln)
+			emails[email] = name
+		return emails
+	def __init__(self, pref=os.environ['HOME']+'/.changelog-transform/', guess=True):
+		self.pref = pref
+		self.emaildb = self.readdb("emaildb")
+		self.guess = guess
+		if guess:
+			self.guessmaildb = self.readdb("guessmaildb")
+	def addrappend(self, nm, addrs):
+		fullnm = self.pref+nm
+		fd = open(fullnm, 'a')
+		for it in addrs.keys():
+			val = self.emaildb.get(it)
+			if val:
+				if val == addrs[it]:
+					continue
+				else:
+					raise ValueError("Will not overwrite %s <%s> with %s" % (val, it, addrs[it]))
+			print_("%s <%s>" % (addrs[it], it), file=fd)
+		return self
+	def __getitem__(self, srch):
+		try:
+			nm = self.emaildb[srch]
+		except KeyError:
+			nm = changelog.guessnm(srch)
+			if self.guess:
+				try:
+					nm = self.guessmaildb[srch]
+				except:
+					#nm = changelog.guessnm(srch)
+					print_("WARN: Add %s <%s> to guessmaildb" % (nm, srch), file=sys.stderr)
+					self.addrappend("guessmaildb", {srch: nm})
+			else:
+				raise ValueError('No such email %s <%s>' % (nm, srch))
+
 def main(argv):
-	global infmt, outfmt, pkgnm
+	global infmt, outfmt, pkgnm, emails
 	innm, outnm = parse_args(argv)
 	if not infmt:
 		if innm[-8:] == ".changes":
@@ -145,7 +202,13 @@ def main(argv):
 	else:
 		infd = open(innm, 'r')
 
-	chglog = changelog.changelog(pkgnm = pkgnm, authover = authnm, distover = dist, initver = initver, emaildb = emails)
+	if emaildb:
+		if emails:
+			emails = emailsdb(guess = guessmail).append(emails)
+		else:
+			emails = emailsdb(guess = guessmail)
+
+	chglog = changelog.changelog(pkgnm = pkgnm, distover = dist, initver = initver, emaildb = emails)
 	if infmt == 'rpm':
 		chglog.rpmparse(infd, joinln, tolerant, maxent)
 	elif infmt == 'deb':
