@@ -15,8 +15,10 @@ Note that the translation RPM -> DEB does need to do some guessing, as debian
 changelogs have more metadata (author's real name, package name, version number,
 urgency, distro). The script attempts to do good guesses, but expect some postprocessing
 to be required.
+Note that wee have the ability to collect and remember email address -> name mappings
+now, so that part at least gets better and better the more often you specify
+mappings with -a.
 
-As of 2018-02-01, the changelog.py library is mostly complete and even somewhat
+As of 2018-01-03, the changelog.py library is mostly complete and even somewhat
 tested. What is needed still:
 * More tolerance against strangely formatted changelogs
-* Ability to have maps of email -> name translations
