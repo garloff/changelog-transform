@@ -3,7 +3,7 @@
 # CLI frontend to changelog transformer
 #
 # (c) Kurt Garloff <kurt@garloff.de>, 1/2018
-# License: CC-BYr-_SA 3.0
+# License: CC-BY-SA 3.0
 
 import sys
 import os
@@ -21,6 +21,8 @@ authnm   = ''
 dist     = 'stable'
 pkgnm    = ''
 maxent   = 0
+emails   = {}
+emaildb  = False
 
 def helpout(rc=1):
 	print_("Usage: changelog-transform.py [options] in out", file=sys.stderr)
@@ -32,22 +34,25 @@ def helpout(rc=1):
 	print_(" -t, --tolerant: Tolerate non-std formatting", file=sys.stderr)
 	print_(" -i, --infmt rpm/deb: Override input file detection", file=sys.stderr)
 	print_(" -o, --outfmt rpm/deb: Override output file detection", file=sys.stderr)
-	print_(" -V, --version ver: Set initial version", file=sys.stderr)
-	print_(" -a, --author authorname: Set authors name", file=sys.stderr)
+	print_(" -m, --maxent no: Set max number of entries to process (def=all)", file=sys.stderr)
+	print_(" Options to fill in info for RPM->DEB conversions:", file=sys.stderr)
+	print_(" -V, --version x.y-r: Set initial version (def: ?-0)", file=sys.stderr)
+	print_(" -a, --author authorname: Set authors name (def: guess from addr)", file=sys.stderr)
+	print_(" -e, --emails LIST: provide list of mails \"NAME <adr> [, NAME <adr> [..]]]\"", file=sys.stderr)
+#	print_(" -E, --emaildb: use .emaildb and .guessemaildb for names", file=sys.stderr)
 	print_(" -d, --distro distname: Override distro name (def=stable)", file=sys.stderr)
 	print_(" -n, --pkgname pkgnm: Set package name (def=autodetect)", file=sys.stderr)
-	print_(" -m, --maxent no: Set max number of entries to process (def=all)", file=sys.stderr)
 	sys.exit(rc)
 
 def parse_args(argv):
 	"Parse command line args"
 	import getopt
 	global quiet, verbose, infmt, outfmt, tolerant, joinln
-	global initver, authnm, dist, pkgnm, maxent
+	global initver, authnm, dist, pkgnm, maxent, emails, emaildb
 
 	# options
 	try:
-		optlist, args = getopt.gnu_getopt(argv, 'vqhi:o:trV:a:d:n:m:', ('help', 'quiet', 'verbose', 'tolerant', 'rewrap', 'infmt=', 'outfmt=', 'version=', 'author=', 'distro=', 'pkgname=', 'maxent='))
+		optlist, args = getopt.gnu_getopt(argv, 'vqhi:o:trV:a:d:n:m:e:E', ('help', 'quiet', 'verbose', 'tolerant', 'rewrap', 'infmt=', 'outfmt=', 'version=', 'author=', 'distro=', 'pkgname=', 'maxent=', 'emails=', 'emaildb'))
 	except getopt.GetoptError as exc:
 		print_(exc)
 		helpout(1)
@@ -70,20 +75,33 @@ def parse_args(argv):
 		if opt == '-o' or opt == '--outfmt':
 			outfmt = arg
 			continue
+		if opt == '-m' or opt == '--maxent':
+			maxent = int(arg)
+			continue
+		# for RPM -> DEB
 		if opt == '-V' or opt == '--version':
 			initver = arg
 			continue
 		if opt == '-a' or opt == '--author':
 			authnm = arg
 			continue
+		if opt == '-e' or opt == '--emails':
+			for addr in arg.split(','):
+				idx = addr.find('<')
+				idx2 = addr.find('>')
+				if idx < 0 or idx2 < 0:
+					raise ValueError("Invalid Mail Address \"%s\"" % addr)
+				nm = addr[:idx].rstrip(' ')
+				emails[addr[idx+1:idx2]] = nm
+			continue
+		if opt == '-E' or opt == '--emaildb':
+			emaildb = True
+			continue
 		if opt == '-d' or opt == '--distro':
 			dist = arg
 			continue
 		if opt == '-n' or opt == '--pkgname':
 			pkgnm = arg
-			continue
-		if opt == '-m' or opt == '--maxent':
-			maxent = int(arg)
 			continue
 		if opt == '-h' or opt == '--help':
 			helpout(0)
@@ -127,7 +145,7 @@ def main(argv):
 	else:
 		infd = open(innm, 'r')
 
-	chglog = changelog.changelog(pkgnm = pkgnm, authover = authnm, distover = dist, initver = initver)
+	chglog = changelog.changelog(pkgnm = pkgnm, authover = authnm, distover = dist, initver = initver, emaildb = emails)
 	if infmt == 'rpm':
 		chglog.rpmparse(infd, joinln, tolerant, maxent)
 	elif infmt == 'deb':
