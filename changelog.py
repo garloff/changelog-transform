@@ -326,6 +326,7 @@ class logentry:
 							self.authnm = self.emaildb[email]
 						except KeyError:
 							self.authnm = guessnm(email)
+							print_("WARN: No name found for email %s, guess %s" % (email, self.authnm), file=sys.stderr)
 					else:
 						self.authnm = guessnm(email)
 				continue
