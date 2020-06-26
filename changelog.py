@@ -205,9 +205,11 @@ class logitem:
 class logentry:
 	"Class to hold one changelog entry data"
 	import re
-	verrgx = re.compile(r'\-[0-9]*\.[^ :]*')
-	ver2rgx = re.compile(r'[uU]pdate to ([0-9]*\.[^ :]*)')
-	ver3rgx = re.compile(r'[rR]elease[: ]*([0-9]*\.[^ :]*)')
+	verrgx = re.compile(r'\-([0-9]*\.[^ :]*):')
+	ver1rgx = re.compile(r'\-([0-9]*\.[^ :]*)')
+	ver2rgx = re.compile(r'[uU]pdate to [ a-zA-Z-]*([0-9]*\.[^ :]*)')
+	ver3rgx = re.compile(r'[vV]ersion[: ]*([0-9]*\.[^ :]*)')
+	ver4rgx = re.compile(r'[rR]elease[: ]*([0-9]*\.[^ :]*)')
 	emerkwds = ('emergency',)
 	highkwds = ('CVE', 'exploit')
 	medkwds  = ('security', 'vulnerability', 'leak', 'major', ' critical')
@@ -216,6 +218,7 @@ class logentry:
 		self.email = email
 		self.authnm = authnm
 		self.pkgnm = pkgnm
+		self.ver0rgx = logentry.re.compile(r'%s[- ]([0-9]*\.[^ :]*)' % pkgnm)
 		self.vers = vers
 		self.dist = dist
 		self.urg = urg
@@ -255,29 +258,26 @@ class logentry:
 		for ent in self.items:
 			ln = ent.head
 			m = logentry.verrgx.search(ln)
+			if not m:
+				m = self.ver0rgx.search(ln)
+			if not m:
+				m = logentry.ver1rgx.search(ln)
+			if not m:
+				m = logentry.ver2rgx.search(ln)
+			if not m:
+				m = logentry.ver3rgx.search(ln)
 			if m:
-				self.vers = m.group(0)[1:].rstrip('.')
+				#self.vers = m.group(0)[1:].rstrip('.')
+				self.vers = m.group(1).rstrip('.')
 				if not self.pkgnm:
 					idx = ln.find(self.vers)
 					pidx = ln[0:idx].rfind(' ')
 					self.pkgnm = ln[pidx+1:idx-1]
+					self.ver0rgx = logentry.re.compile(r'%s[- ]([0-9]*\.[^ :]*)' % self.pkgnm)
 				if self.vers.find('-') == -1:
 					self.vers += '-1'
 				return
-			m = logentry.ver2rgx.search(ln)
-			if m:
-				self.vers = m.group(1).rstrip('.')
-				if self.vers.find('-') == -1:
-					self.vers += '-1'
-				#print_("FOUND VER2: " + self.vers)
-				return
-			m = logentry.ver3rgx.search(ln)
-			if m:
-				self.vers = m.group(1).rstrip('.')
-				if self.vers.find('-') == -1:
-					self.vers += '-1'
-				#print_("FOUND VER3: " + self.vers)
-				return
+
 
 	def guess_urg(self):
 		"Guess urgency"
@@ -436,6 +436,7 @@ class changelog:
 		lastver = self.initver
 		lastpkg = None
 		for idx in range(len(self.entries)-1, -1, -1):
+			#print_(sys.stderr, lastver)
 			if not self.entries[idx].vers:
 				self.entries[idx].vers = increl(lastver)
 			if lastpkg and not self.entries[idx].pkgnm:
