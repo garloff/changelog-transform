@@ -105,7 +105,10 @@ def findtzoff(offstr, date, email = ''):
 def increl(prevver):
 	"Incr. -release string by one"
 	pver = prevver.split('-')
-	pver[-1] = str(int(pver[-1])+1)
+	try:
+		pver[-1] = str(int(pver[-1])+1)
+	except:
+		pass
 	return '-'.join(pver)
 
 class ParseError(ValueError):
